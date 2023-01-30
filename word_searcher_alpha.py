@@ -7,7 +7,7 @@ from tkinter import *
 from tkinter.ttk import Treeview
 from types import NoneType
 
-con = sqlite3.connect('bbwdb_with_id_note_greek_ctre.db')
+con = sqlite3.connect('bbwdb.db')
 cur = con.cursor()
 
 DG = nx.DiGraph()
