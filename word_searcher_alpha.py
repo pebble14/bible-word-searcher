@@ -7,8 +7,10 @@ from tkinter import *
 from tkinter.ttk import Treeview
 from types import NoneType
 
-con = sqlite3.connect('bbwdb.db')
+con = sqlite3.connect('bbwdb_with_id_note_greek_ctre.db')
 cur = con.cursor()
+
+DG = nx.DiGraph()
 
 # 데이터베이스의 필드명(튜플)
 field = ('id', '언어', '스트롱 넘버', \
@@ -48,6 +50,12 @@ tv_show = (field_idx['id'], field_idx['언어'], field_idx['스트롱'], \
     field_idx['의미1'], field_idx['의미2'], field_idx['의미3'], field_idx['의미4'], field_idx['의미5'], field_idx['의미6'], field_idx['의미7'], \
     field_idx['비고'] )
 
+# tv_show = (field_idx['언어'], field_idx['스트롱'], \
+#     field_idx['표기1'], field_idx['표기2'], field_idx['표기3'], field_idx['표기4'], \
+#     field_idx['음역1'], field_idx['음역2'], field_idx['음역3'], field_idx['음역4'], \
+#     field_idx['의미1'], field_idx['의미2'], field_idx['의미3'], field_idx['의미4'], field_idx['의미5'], field_idx['의미6'], field_idx['의미7'], \
+#     field_idx['비고'] )
+
 # 트리뷰 행 정의(튜플: 딕셔너리에서 원하는 값 불러오기)
 tv_column = (field_exp['id'], field_exp['언어'], field_exp['스트롱'], \
     field_exp['표기1'], field_exp['표기2'], field_exp['표기3'], field_exp['표기4'], \
@@ -56,6 +64,12 @@ tv_column = (field_exp['id'], field_exp['언어'], field_exp['스트롱'], \
     field_exp['의미1'], field_exp['의미2'], field_exp['의미3'], field_exp['의미4'], field_exp['의미5'], field_exp['의미6'], field_exp['의미7'], \
     field_exp['비고'] )
 
+# tv_column = (field_exp['언어'], field_exp['스트롱'], \
+#     field_exp['표기1'], field_exp['표기2'], field_exp['표기3'], field_exp['표기4'], \
+#     field_exp['음역1'], field_exp['음역2'], field_exp['음역3'], field_exp['음역4'], \
+#     field_exp['의미1'], field_exp['의미2'], field_exp['의미3'], field_exp['의미4'], field_exp['의미5'], field_exp['의미6'], field_exp['의미7'], \
+#     field_exp['비고'] )
+
 # 각 행 길이 수치 튜플화(튜플: 딕셔너리에서 원하는 값 불러오기)
 tv_clm_len = (length['id'], length['언어'], length['스트롱'], \
     length['표기'], length['표기'], length['표기'], length['표기'], \
@@ -63,6 +77,14 @@ tv_clm_len = (length['id'], length['언어'], length['스트롱'], \
     length['관련'], length['관련'], length['관련'], length['관련'], \
     length['의미'], length['의미'], length['의미'], length['의미'], length['의미'], length['의미'], length['의미'], \
     length['비고'] )
+
+# tv_clm_len = (length['언어'], length['스트롱'], \
+#     length['표기'], length['표기'], length['표기'], length['표기'], \
+#     length['음역'], length['음역'], length['음역'], length['음역'], \
+#     length['의미'], length['의미'], length['의미'], length['의미'], length['의미'], length['의미'], length['의미'], \
+#     length['비고'] )
+
+nx_node = (field_idx['id'], field_idx['관련1'], field_idx['관련2'], field_idx['관련3'], field_idx['관련4'])
 
 # can_w_h = (700, 300) # 캔버스 너비, 높이(튜플)
 
@@ -97,6 +119,36 @@ class DataBase: #데이터베이스 핸들링 클래스
         else:
             cur.execute("SELECT * FROM 테이블 WHERE "+fld+" = ?", (kwd, ) )
 
+def find_words(input):
+        DataBase(input).handle_db_main(input) # 데이터베이스 검색 함수(주)
+        words = cur.fetchall() # 검색된 자료 불러오기
+        return words
+
+def find_origin(input):
+    origin= [] # origin 자료를 위한 리스트 생성
+    for i in range(len(input) ): # 검색한 단어의 '관련' 항에 기입된 'id'를 이용하여 추가검색
+        org=(input[i][field_idx['관련1'] ], \
+            input[i][field_idx['관련2'] ], \
+            input[i][field_idx['관련3'] ], \
+            input[i][field_idx['관련4'] ] )
+        for j in range(4):
+            DataBase(input).handle_db_rlt('id', org[j] )
+            origin.extend(cur.fetchall() ) # 검색된 자료 불러오기
+    return origin
+
+def find_relate(keyword, input):
+    field_rlt = (field[field_idx['관련1'] ], \
+        field[field_idx['관련2'] ], \
+        field[field_idx['관련3'] ], \
+        field[field_idx['관련4'] ] ) # 데이터베이스 검색 함수를 위한 필드 정의
+    relate = [] # relate 자료를 위한 리스트 생성
+    for i in range(len(input) ): # '관련' 항에 검색한 단어의 'id'가 기록된 자료 검색
+        for j in range(4):
+            DataBase(keyword).handle_db_rlt(field_rlt[j], input[i][field_idx['id'] ] ) # 데이터베이스 검색 함수(관련)
+            relate.extend(cur.fetchall() ) # 검색된 자료 불러오기
+    return relate
+    pass
+
 # None -> '' 변환 함수
 def rmv_none(input_data):
     for i in range(len(input_data) ):
@@ -104,6 +156,9 @@ def rmv_none(input_data):
         for j in range(0, 27):
             if input_data[i][j] == None:
                 input_data[i][j] = ''
+
+# def rmv_none(input_data):
+#     return list(filter(lambda x: x != None, input_data))
 
 # 중복 제거 함수
 def rmv_dplct(input_data):
@@ -114,15 +169,46 @@ def rmv_dplct(input_data):
     return mid_data
 
 # 자료 갈무리 함수
-def orgnz_data(input_data, output_data):
+def orgnz_data(input_data):
+    return [[input_data[i][j] for j in tv_show] for i in range(len(input_data) ) ]
+
+def mk_nx_node(input_data):
     for i in range(len(input_data) ):
-        output_data += [ [input_data[i][field_idx['id'] ], input_data[i][field_idx['언어'] ], input_data[i][field_idx['스트롱'] ], \
-            input_data[i][field_idx['표기1'] ], input_data[i][field_idx['표기2'] ], input_data[i][field_idx['표기3'] ], input_data[i][field_idx['표기4'] ], \
-            input_data[i][field_idx['음역1'] ], input_data[i][field_idx['음역2'] ], input_data[i][field_idx['음역3'] ], input_data[i][field_idx['음역4'] ], \
-            input_data[i][field_idx['관련1'] ], input_data[i][field_idx['관련2'] ], input_data[i][field_idx['관련3'] ], input_data[i][field_idx['관련4'] ], \
-            input_data[i][field_idx['의미1'] ], input_data[i][field_idx['의미2'] ], input_data[i][field_idx['의미3'] ], input_data[i][field_idx['의미4'] ], \
-            input_data[i][field_idx['의미5'] ], input_data[i][field_idx['의미6'] ], input_data[i][field_idx['의미7'] ], \
-            input_data[i][field_idx['비고'] ] ] ]
+        if input_data[i][field_idx['id'] ] in list(DG.nodes):
+            continue
+        else:
+            text_node = input_data[i][field_idx['스트롱'] ]+'\n'+input_data[i][field_idx['표기1'] ]+'\n'+input_data[i][field_idx['id'] ]
+            DG.add_node(input_data[i][field_idx['id'] ], text=text_node)
+
+# def mk_nx_node(input_data):
+#     for i in range(len(input_data) ):
+#         DG.add_node(input_data[i][0], text=str(input_data[i][2]+'\n'+input_data[i][3] ) )
+
+def mk_nx_edge(input_data):
+    for i in range(len(input_data) ):
+        for j in [field_idx['관련1'], field_idx['관련2'], field_idx['관련3'], field_idx['관련4']]:
+            if input_data[i][j] != '':
+                if input_data[i][j] in list(DG.nodes):
+                    pass
+                else:
+                    node_temp = []
+                    DataBase(input_data[i][j] ).handle_db_rlt('id', input_data[i][j] )
+                    node_temp.extend(cur.fetchall() )
+                    rmv_none(node_temp)
+                    text_node = node_temp[0][field_idx['스트롱'] ]+'\n'+node_temp[0][field_idx['표기1'] ]+'\n'+node_temp[0][field_idx['id'] ]
+                    DG.add_node(input_data[i][j], text=text_node)
+                    node_temp = []
+                DG.add_edge(input_data[i][j], input_data[i][0] )
+            else:
+                continue
+
+# def mk_nx_edge(input_data):
+#     for i in range(len(input_data) ):
+#         for j in [15, 16, 17, 18]:
+#             if input_data[i][j] != '':
+#                 DG.add_edge(input_data[i][j], input_data[i][0] )
+#             else:
+#                 continue
 
 # 트리뷰 생성 클래스
 class TreeView_Ctrl:
@@ -160,63 +246,69 @@ def clip_tv_2(event):
 def clip_tv_3(event):
     clip_tv_base(tv_3)
 
+####################################################################################################
 # 버튼 클릭 명령 함수
+####################################################################################################
 def btncmd():
     #트리뷰 초기화
     for i in range(3):
         tv[i].delete(*tv[i].get_children() )
 
+    #그래프 초기화
+    plt.cla()
+    #networkx 초기화
+    DG.clear()
+
     #키워드 획득
     wrd = s_e.get() # 획득한 키워드를 wrd로 획득
-    result = DataBase(wrd)
-    result.handle_db_main(wrd) # 데이터베이스 검색 함수(주)
-    words = cur.fetchall() # 검색된 자료 불러오기
+    words = find_words(wrd)
     words.sort() # 불러온 자료 정렬
 
-    origin= [] # origin 자료를 위한 리스트 생성
-    for i in range(len(words) ): # 검색한 단어의 '관련' 항에 기입된 'id'를 이용하여 추가검색
-        org=(words[i][15], words[i][16], words[i][17], words[i][18] )
-        for j in range(4):
-            result.handle_db_rlt('id', org[j] ) # 데이터베이스 검색 함수(관련)
-            # [origin.extend(x) for x in cur.fetchall() if x not in origin] # 검색된 자료 불러오기
-            origin.extend(cur.fetchall() ) # 검색된 자료 불러오기
+    origin = find_origin(words)
     origin.sort() # 불러온 자료 정렬
 
-    field_rlt = (field[15], field[16], field[17], field[18] ) # 데이터베이스 검색 함수를 위한 필드 정의
-    relate = [] # relate 자료를 위한 리스트 생성
-    for i in range(len(words) ): # '관련' 항에 검색한 단어의 'id'가 기록된 자료 검색
-        for j in range(4):
-            result.handle_db_rlt(field_rlt[j], words[i][0] ) # 데이터베이스 검색 함수(관련)
-            relate.extend(cur.fetchall() ) # 검색된 자료 불러오기
+    relate = find_relate(wrd, words)
     relate.sort() # 불러온 자료 정렬
 
     rmv_none(words)
     rmv_none(origin)
     rmv_none(relate)
 
+    origin = rmv_dplct(origin)
+    relate = rmv_dplct(relate)
+
+    origin = [i for i in origin if i not in words]
+    relate = [i for i in relate if i not in words and i not in origin]
+
     words_show = []
     origin_show = []
     relate_show = []
-    orgnz_data(words, words_show)
-    orgnz_data(origin, origin_show)
-    orgnz_data(relate, relate_show)
 
-    origin_show = rmv_dplct(origin_show)
-    relate_show = rmv_dplct(relate_show)
-
-    relate_show = [i for i in relate_show if i not in words_show]
-    relate_show = [i for i in relate_show if i not in origin_show]
+    words_show = orgnz_data(words)
+    origin_show = orgnz_data(origin)
+    relate_show = orgnz_data(relate)
 
     for i in range(len(words_show) ):
         tv_1.insert(parent="", index=i, iid=i, text='', values=(words_show[i]) )
     for i in range(len(origin_show) ):
         tv_2.insert(parent='', index=i, iid=i, text='', values=origin_show[i] )
-        # if type(origin_show[i] ) == NoneType:
-        #     pass
-        # else:
-        #     tv_2.insert(parent='', index=i, iid=i, text='', values=origin_show[i] )
     for i in range(len(relate_show) ):
         tv_3.insert(parent='', index=i, iid=i, text='', values=relate_show[i] )
+
+    mk_nx_node(words)
+    mk_nx_node(origin)
+    mk_nx_node(relate)
+    mk_nx_edge(words)
+    mk_nx_edge(relate)
+
+    pos = nx.shell_layout(DG)
+    nx.draw_networkx_nodes(DG, pos, node_size=2100, node_color='#00ff00')
+    nx.draw_networkx_edges(DG, pos, node_size=2100)
+
+    node_labels = nx.get_node_attributes(DG, 'text')
+    nx.draw_networkx_labels(DG, pos, font_family='sans-serif', font_size=10, labels = node_labels)
+
+    plt.show()
 
 ####################################################################################################
 # 여기부터 프로그램 UI 관련 코드
@@ -249,8 +341,8 @@ tvsb_h_1 = Scrollbar(frame_1, orient='horizontal')# 트리뷰1용 가로 스크�
 tvsb_h_2 = Scrollbar(frame_2, orient='horizontal')# 트리뷰2용 가로 스크롤 바
 tvsb_h_3 = Scrollbar(frame_3, orient='horizontal')# 트리뷰3용 가로 스크롤 바
 tvsb_h = (tvsb_h_1, tvsb_h_2, tvsb_h_3)
-tv_1 = Treeview(frame_1, height=3, xscrollcommand=tvsb_h_1.set, yscrollcommand=tvsb_v_1.set)# 검색 단어 출력 트리뷰
-tv_2 = Treeview(frame_2, height=4, xscrollcommand=tvsb_h_2.set, yscrollcommand=tvsb_v_2.set)# 유래 출력 트리뷰
+tv_1 = Treeview(frame_1, height=7, xscrollcommand=tvsb_h_1.set, yscrollcommand=tvsb_v_1.set)# 검색 단어 출력 트리뷰
+tv_2 = Treeview(frame_2, height=7, xscrollcommand=tvsb_h_2.set, yscrollcommand=tvsb_v_2.set)# 유래 출력 트리뷰
 tv_3 = Treeview(frame_3, height=7, xscrollcommand=tvsb_h_3.set, yscrollcommand=tvsb_v_3.set)# 관련 단어 출력 트리뷰
 tv = (tv_1, tv_2, tv_3)
 for i in range(len(tv) ):
