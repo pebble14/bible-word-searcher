@@ -3,6 +3,7 @@
 import sqlite3
 import networkx as nx
 import matplotlib.pyplot as plt
+from bidi import algorithm as bidialg
 from tkinter import *
 from tkinter.ttk import Treeview
 from types import NoneType
@@ -50,12 +51,6 @@ tv_show = (field_idx['id'], field_idx['언어'], field_idx['스트롱'], \
     field_idx['의미1'], field_idx['의미2'], field_idx['의미3'], field_idx['의미4'], field_idx['의미5'], field_idx['의미6'], field_idx['의미7'], \
     field_idx['비고'] )
 
-# tv_show = (field_idx['언어'], field_idx['스트롱'], \
-#     field_idx['표기1'], field_idx['표기2'], field_idx['표기3'], field_idx['표기4'], \
-#     field_idx['음역1'], field_idx['음역2'], field_idx['음역3'], field_idx['음역4'], \
-#     field_idx['의미1'], field_idx['의미2'], field_idx['의미3'], field_idx['의미4'], field_idx['의미5'], field_idx['의미6'], field_idx['의미7'], \
-#     field_idx['비고'] )
-
 # 트리뷰 행 정의(튜플: 딕셔너리에서 원하는 값 불러오기)
 tv_column = (field_exp['id'], field_exp['언어'], field_exp['스트롱'], \
     field_exp['표기1'], field_exp['표기2'], field_exp['표기3'], field_exp['표기4'], \
@@ -63,12 +58,6 @@ tv_column = (field_exp['id'], field_exp['언어'], field_exp['스트롱'], \
     field_exp['관련1'], field_exp['관련2'], field_exp['관련3'], field_exp['관련4'], \
     field_exp['의미1'], field_exp['의미2'], field_exp['의미3'], field_exp['의미4'], field_exp['의미5'], field_exp['의미6'], field_exp['의미7'], \
     field_exp['비고'] )
-
-# tv_column = (field_exp['언어'], field_exp['스트롱'], \
-#     field_exp['표기1'], field_exp['표기2'], field_exp['표기3'], field_exp['표기4'], \
-#     field_exp['음역1'], field_exp['음역2'], field_exp['음역3'], field_exp['음역4'], \
-#     field_exp['의미1'], field_exp['의미2'], field_exp['의미3'], field_exp['의미4'], field_exp['의미5'], field_exp['의미6'], field_exp['의미7'], \
-#     field_exp['비고'] )
 
 # 각 행 길이 수치 튜플화(튜플: 딕셔너리에서 원하는 값 불러오기)
 tv_clm_len = (length['id'], length['언어'], length['스트롱'], \
@@ -78,15 +67,7 @@ tv_clm_len = (length['id'], length['언어'], length['스트롱'], \
     length['의미'], length['의미'], length['의미'], length['의미'], length['의미'], length['의미'], length['의미'], \
     length['비고'] )
 
-# tv_clm_len = (length['언어'], length['스트롱'], \
-#     length['표기'], length['표기'], length['표기'], length['표기'], \
-#     length['음역'], length['음역'], length['음역'], length['음역'], \
-#     length['의미'], length['의미'], length['의미'], length['의미'], length['의미'], length['의미'], length['의미'], \
-#     length['비고'] )
-
 nx_node = (field_idx['id'], field_idx['관련1'], field_idx['관련2'], field_idx['관련3'], field_idx['관련4'])
-
-# can_w_h = (700, 300) # 캔버스 너비, 높이(튜플)
 
 ####################################################################################################
 # 여기부터 클래스와 함수 관련 코드
@@ -157,9 +138,6 @@ def rmv_none(input_data):
             if input_data[i][j] == None:
                 input_data[i][j] = ''
 
-# def rmv_none(input_data):
-#     return list(filter(lambda x: x != None, input_data))
-
 # 중복 제거 함수
 def rmv_dplct(input_data):
     mid_data = []
@@ -177,38 +155,50 @@ def mk_nx_node(input_data):
         if input_data[i][field_idx['id'] ] in list(DG.nodes):
             continue
         else:
-            text_node = input_data[i][field_idx['스트롱'] ]+'\n'+input_data[i][field_idx['표기1'] ]+'\n'+input_data[i][field_idx['id'] ]
-            DG.add_node(input_data[i][field_idx['id'] ], text=text_node)
-
-# def mk_nx_node(input_data):
-#     for i in range(len(input_data) ):
-#         DG.add_node(input_data[i][0], text=str(input_data[i][2]+'\n'+input_data[i][3] ) )
+            if input_data[i][1] == '히브리어/아람어':
+                node_clr = 'gold'
+            elif input_data[i][1] == '헬라어':
+                node_clr = 'aqua'
+            elif input_data[i][1] == '라틴어':
+                node_clr = 'orangered'
+            elif input_data[i][1] == '영어':
+                node_clr = 'violet'
+            else:
+                node_clr = 'lightgrey'
+            text_node = bidialg.get_display(input_data[i][field_idx['언어'] ]\
+                +'\n'+input_data[i][field_idx['스트롱'] ]+'\n'+input_data[i][field_idx['표기1'] ]\
+                +'\n'+input_data[i][field_idx['음역1'] ]+'\n'+input_data[i][field_idx['의미1'] ] )
+            DG.add_node(input_data[i][field_idx['id'] ], color = node_clr, text=text_node)
 
 def mk_nx_edge(input_data):
     for i in range(len(input_data) ):
-        for j in [field_idx['관련1'], field_idx['관련2'], field_idx['관련3'], field_idx['관련4']]:
+        for j in [field_idx['관련1'], field_idx['관련2'], field_idx['관련3'], field_idx['관련4'] ]:
             if input_data[i][j] != '':
                 if input_data[i][j] in list(DG.nodes):
                     pass
                 else:
+                    if input_data[i][1] == '히브리어/아람어':
+                        node_clr = 'gold'
+                    elif input_data[i][1] == '헬라어':
+                        node_clr = 'aqua'
+                    elif input_data[i][1] == '라틴어':
+                        node_clr = 'orangered'
+                    elif input_data[i][1] == '영어':
+                        node_clr = 'violet'
+                    else:
+                        node_clr = 'lightgrey'
                     node_temp = []
                     DataBase(input_data[i][j] ).handle_db_rlt('id', input_data[i][j] )
                     node_temp.extend(cur.fetchall() )
                     rmv_none(node_temp)
-                    text_node = node_temp[0][field_idx['스트롱'] ]+'\n'+node_temp[0][field_idx['표기1'] ]+'\n'+node_temp[0][field_idx['id'] ]
-                    DG.add_node(input_data[i][j], text=text_node)
+                    text_node = bidialg.get_display(node_temp[0][field_idx['언어'] ]\
+                        +'\n'+node_temp[0][field_idx['스트롱'] ]+'\n'+node_temp[0][field_idx['표기1'] ]\
+                        +'\n'+node_temp[0][field_idx['음역1'] ]+'\n'+node_temp[0][field_idx['의미1'] ] )
+                    DG.add_node(input_data[i][j], color = node_clr, text=text_node)
                     node_temp = []
                 DG.add_edge(input_data[i][j], input_data[i][0] )
             else:
                 continue
-
-# def mk_nx_edge(input_data):
-#     for i in range(len(input_data) ):
-#         for j in [15, 16, 17, 18]:
-#             if input_data[i][j] != '':
-#                 DG.add_edge(input_data[i][j], input_data[i][0] )
-#             else:
-#                 continue
 
 # 트리뷰 생성 클래스
 class TreeView_Ctrl:
@@ -302,11 +292,13 @@ def btncmd():
     mk_nx_edge(relate)
 
     pos = nx.shell_layout(DG)
-    nx.draw_networkx_nodes(DG, pos, node_size=2100, node_color='#00ff00')
-    nx.draw_networkx_edges(DG, pos, node_size=2100)
+    node_colors = [node[1]['color'] for node in DG.nodes(data=True)]
+
+    nx.draw_networkx_nodes(DG, pos, node_size=3000, node_color=node_colors)
+    nx.draw_networkx_edges(DG, pos, node_size=3000)
 
     node_labels = nx.get_node_attributes(DG, 'text')
-    nx.draw_networkx_labels(DG, pos, font_family='sans-serif', font_size=10, labels = node_labels)
+    nx.draw_networkx_labels(DG, pos, font_family=['Noto Sans', 'Noto Sans Hebrew', 'Malgun Gothic'], font_size=10, labels = node_labels)
 
     plt.show()
 
@@ -315,7 +307,7 @@ def btncmd():
 ####################################################################################################
 root = Tk()# GUI 루프 시작
 root.title('단어 검색')# 창 제목
-# root.attributes('-fullscreen', True)
+# root.attributes('-fullscreen', True)# 전체화면 설정
 root.geometry('%dx%d+50+50' %(root.winfo_screenwidth()-100, root.winfo_screenheight()-200 ) )# 창 크기
 
 # 프레임 셋업
