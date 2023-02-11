@@ -8,7 +8,7 @@ from tkinter import *
 from tkinter.ttk import Treeview
 from types import NoneType
 
-con = sqlite3.connect('bbwdb.db')
+con = sqlite3.connect('bbwdb_20230207.db')
 cur = con.cursor()
 
 DG = nx.DiGraph()
@@ -19,7 +19,8 @@ field = ('id', '언어', '스트롱 넘버', \
     '음역1', '음역2', '음역3', '음역4', \
     '발음1', '발음2', '발음3', '발음4', \
     '관련1', '관련2', '관련3', '관련4', \
-    '의미1', '의미2', '의미3', '의미4', '의미5', '의미6', '의미7', '비고')
+    '의미1', '의미2', '의미3', '의미4', '의미5', '의미6', '의미7', \
+    '비고')
 
 # 데이터베이스의 필드명에 대한 숫자 인덱스(딕셔너리)
 field_idx = {'id': 0, '언어': 1, '스트롱': 2, \
@@ -40,8 +41,9 @@ field_exp = {'id': 'id', '언어': 'lang', '스트롱': 'strong', \
     '비고': 'etc,.'}
 
 # 트리뷰 각 행 별 길이 값(딕셔너리)
-length = {'id': 80, '언어': 100, '스트롱': 80, '표기':100, '음역': 100, '발음': 80, '관련': 80, \
-    '의미': 140, '비고': 70}
+length = {'id': 80, '언어': 100, '스트롱': 80, \
+    '표기':100, '음역': 100, '발음': 80, \
+    '관련': 80, '의미': 140, '비고': 70}
 
 # 트리뷰를 통해 표시할 필드의 인덱스(튜플: 딕셔너리에서 원하는 값 불러오기)
 tv_show = (field_idx['id'], field_idx['언어'], field_idx['스트롱'], \
@@ -59,15 +61,13 @@ tv_column = (field_exp['id'], field_exp['언어'], field_exp['스트롱'], \
     field_exp['의미1'], field_exp['의미2'], field_exp['의미3'], field_exp['의미4'], field_exp['의미5'], field_exp['의미6'], field_exp['의미7'], \
     field_exp['비고'] )
 
-# 각 행 길이 수치 튜플화(튜플: 딕셔너리에서 원하는 값 불러오기)
+# 각 행 길이 수치(튜플: 딕셔너리에서 원하는 값 불러오기)
 tv_clm_len = (length['id'], length['언어'], length['스트롱'], \
     length['표기'], length['표기'], length['표기'], length['표기'], \
     length['음역'], length['음역'], length['음역'], length['음역'], \
     length['관련'], length['관련'], length['관련'], length['관련'], \
     length['의미'], length['의미'], length['의미'], length['의미'], length['의미'], length['의미'], length['의미'], \
     length['비고'] )
-
-nx_node = (field_idx['id'], field_idx['관련1'], field_idx['관련2'], field_idx['관련3'], field_idx['관련4'])
 
 ####################################################################################################
 # 여기부터 클래스와 함수 관련 코드
@@ -106,9 +106,9 @@ def find_words(input):
         return words
 
 def find_origin(input):
-    origin= [] # origin 자료를 위한 리스트 생성
+    origin = [] # origin 자료를 위한 리스트 생성
     for i in range(len(input) ): # 검색한 단어의 '관련' 항에 기입된 'id'를 이용하여 추가검색
-        org=(input[i][field_idx['관련1'] ], \
+        org = (input[i][field_idx['관련1'] ], \
             input[i][field_idx['관련2'] ], \
             input[i][field_idx['관련3'] ], \
             input[i][field_idx['관련4'] ] )
@@ -167,7 +167,11 @@ def mk_nx_node(input_data):
                 node_clr = 'lightgrey'
             text_node = bidialg.get_display(input_data[i][field_idx['언어'] ]\
                 +'\n'+input_data[i][field_idx['스트롱'] ]+'\n'+input_data[i][field_idx['표기1'] ]\
-                +'\n'+input_data[i][field_idx['음역1'] ]+'\n'+input_data[i][field_idx['의미1'] ] )
+                +'\n음역: '+input_data[i][field_idx['음역1'] ]\
+                +'\n의미: \n'+input_data[i][field_idx['의미1'] ]\
+                    +'\n'+input_data[i][field_idx['의미2'] ]\
+                    +'\n'+input_data[i][field_idx['의미3'] ]\
+                    +'\n'+input_data[i][field_idx['의미4'] ] )
             DG.add_node(input_data[i][field_idx['id'] ], color = node_clr, text=text_node)
 
 def mk_nx_edge(input_data):
@@ -193,7 +197,11 @@ def mk_nx_edge(input_data):
                     rmv_none(node_temp)
                     text_node = bidialg.get_display(node_temp[0][field_idx['언어'] ]\
                         +'\n'+node_temp[0][field_idx['스트롱'] ]+'\n'+node_temp[0][field_idx['표기1'] ]\
-                        +'\n'+node_temp[0][field_idx['음역1'] ]+'\n'+node_temp[0][field_idx['의미1'] ] )
+                        +'\n음역: '+node_temp[0][field_idx['음역1'] ]\
+                        +'\n의미: \n'+node_temp[0][field_idx['의미1'] ]\
+                            +'\n'+node_temp[0][field_idx['의미2'] ]\
+                            +'\n'+node_temp[0][field_idx['의미3'] ]\
+                            +'\n'+node_temp[0][field_idx['의미4'] ] )
                     DG.add_node(input_data[i][j], color = node_clr, text=text_node)
                     node_temp = []
                 DG.add_edge(input_data[i][j], input_data[i][0] )
@@ -294,11 +302,11 @@ def btncmd():
     pos = nx.shell_layout(DG)
     node_colors = [node[1]['color'] for node in DG.nodes(data=True)]
 
-    nx.draw_networkx_nodes(DG, pos, node_size=3000, node_color=node_colors)
-    nx.draw_networkx_edges(DG, pos, node_size=3000)
+    nx.draw_networkx_nodes(DG, pos, node_size=5000, node_color=node_colors)
+    nx.draw_networkx_edges(DG, pos, node_size=5000)
 
     node_labels = nx.get_node_attributes(DG, 'text')
-    nx.draw_networkx_labels(DG, pos, font_family=['Noto Sans', 'Noto Sans Hebrew', 'Malgun Gothic'], font_size=10, labels = node_labels)
+    nx.draw_networkx_labels(DG, pos, font_family=['Noto Serif', 'David Libre', 'Gulim'], font_size=10, labels = node_labels)
 
     plt.show()
 
