@@ -1,382 +1,427 @@
-# 이 파이썬 코드는 파이썬 3.11 환경에서 작성했습니다.
-# This python code was written in python 3.10 environment.
+"""
+    Word_Searcher.pyw
+
+    이 파일은 단어 검색 및 관계 시각화를 위한 Tkinter 기반 GUI 애플리케이션을 구현합니다.
+    SQLite 데이터베이스와 상호작용하여 단어를 검색하고, 관련 단어와 파생 단어를 찾으며,
+    그래프를 사용하여 단어 간의 관계를 시각화합니다.
+
+    주요 클래스:
+        - DatabaseHandler: SQLite 데이터베이스와의 상호작용을 처리합니다.
+        - WordSearcher: 단어 검색 및 처리를 위한 메인 클래스입니다.
+        - Application: 단어 검색을 위한 Tkinter 기반 GUI 애플리케이션입니다.
+"""
 import sqlite3
+import re
 import networkx as nx
-import matplotlib.pyplot as plt
-from bidi import algorithm as bidialg
-from tkinter import *
-from tkinter.ttk import Treeview
-from types import NoneType
+from pyvis.network import Network
+from tkinter import Tk, Frame, Label, Entry, Button, filedialog
+from tkinter.scrolledtext import ScrolledText
 
-con = sqlite3.connect('bbwdb.db')
-cur = con.cursor()
+FIELD = (
+    'id', '언어', '스트롱 코드',
+    '표기1', '표기2', '표기3', '표기4', '표기5', '표기6',
+    '음역1', '음역2', '음역3', '음역4', '음역5', '음역6',
+    '발음1', '발음2', '발음3', '발음4', '발음5', '발음6',
+    '관련1', '관련2', '관련3', '관련4', '관련5', '관련6', '관련7',
+    '의미1', '의미2', '의미3', '의미4', '의미5', '의미6', '의미7',
+    '비고'
+)# 데이터베이스 필드
 
-DG = nx.DiGraph()
+FIELD_IDX = {
+    'id': 0, '언어': 1, '스트롱': 2,
+    '표기1': 3, '표기2': 4, '표기3': 5, '표기4': 6, '표기5': 7, '표기6': 8,
+    '음역1': 9, '음역2': 10, '음역3': 11, '음역4': 12, '음역5': 13, '음역6': 14,
+    '발음1': 15, '발음2': 16, '발음3': 17, '발음4': 18, '발음5': 19, '발음6': 20,
+    '관련1': 21, '관련2': 22, '관련3': 23, '관련4': 24, '관련5': 25, '관련6': 26, '관련7': 27,
+    '의미1': 28, '의미2': 29, '의미3': 30, '의미4': 31, '의미5': 32, '의미6': 33, '의미7': 34,
+    '비고': 35
+}# 데이터베이스 필드 인덱스
 
-# 데이터베이스의 필드명(튜플)
-field = ('id', '언어', '스트롱 넘버', \
-    '표기1', '표기2', '표기3', '표기4', \
-    '음역1', '음역2', '음역3', '음역4', \
-    '발음1', '발음2', '발음3', '발음4', \
-    '관련1', '관련2', '관련3', '관련4', \
-    '의미1', '의미2', '의미3', '의미4', '의미5', '의미6', '의미7', \
-    '비고')
+class DatabaseHandler:# 데이터베이스 핸들러
+    """
+        SQLite 데이터베이스와의 상호작용을 처리합니다.
+    
+        이 클래스는 쿼리를 실행하고 SQLite 데이터베이스와의 연결을 관리하는 메서드를 제공합니다.
+    
+        속성:
+            connection (sqlite3.Connection): SQLite 데이터베이스에 대한 연결 객체.
+            cursor (sqlite3.Cursor): SQL 쿼리를 실행하기 위한 커서 객체.
+    
+        메서드:
+            execute_query(query, params=()): 선택적 매개변수와 함께 SQL 쿼리를 실행합니다.
+            close(): 데이터베이스 연결을 닫습니다.
+    
+        예제:
+            db_handler = DatabaseHandler('path_to_db.db')
+            results = db_handler.execute_query('SELECT * FROM table_name WHERE column_name = ?', ('value',))
+            db_handler.close()
+    """
+    def __init__(self, db_path):# 초기화
+        self.connection = sqlite3.connect(db_path)
+        self.cursor = self.connection.cursor()
 
-# 데이터베이스의 필드명에 대한 숫자 인덱스(딕셔너리)
-field_idx = {'id': 0, '언어': 1, '스트롱': 2, \
-    '표기1': 3, '표기2': 4, '표기3': 5, '표기4': 6, \
-    '음역1': 7, '음역2': 8, '음역3': 9, '음역4': 10, \
-    '발음1': 11, '발음2': 12, '발음3': 13, '발음4': 14, \
-    '관련1': 15, '관련2': 16, '관련3': 17, '관련4': 18, \
-    '의미1': 19, '의미2': 20, '의미3': 21, '의미4': 22, '의미5': 23, '의미6': 24, '의미7': 25, \
-    '비고': 26}
+    def execute_query(self, query, params=()):# 쿼리 실행
+        self.cursor.execute(query, params)
+        return self.cursor.fetchall()
 
-# 데이터베이스의 각 필드명에 대응하는 트리뷰의 각 행 명명(딕셔너리)
-field_exp = {'id': 'id', '언어': 'lang', '스트롱': 'strong', \
-    '표기1': 'splg1', '표기2': 'splg2', '표기3': 'splg3', '표기4': 'splg4', \
-    '음역1': "trsl1", '음역2': "trsl2", '음역3': "trsl3", '음역4': "trsl4", \
-    '발음1': "phnt1", '발음2': "phnt2", '발음3': "phnt3", '발음4': "phnt4", \
-    '관련1': "rlt1", '관련2': "rlt2", '관련3': "rlt3", '관련4': "rlt4", \
-    '의미1': 'mng1', '의미2': 'mng2', '의미3': 'mng3', '의미4': 'mng4', '의미5': 'mng5', '의미6': 'mng6', '의미7': 'mng7', \
-    '비고': 'etc,.'}
+    def close(self):# 데이터베이스 연결 종료
+        self.connection.close()
 
-# 트리뷰 각 행 별 길이 값(딕셔너리)
-length = {'id': 80, '언어': 100, '스트롱': 80, \
-    '표기':100, '음역': 100, '발음': 80, \
-    '관련': 80, '의미': 140, '비고': 70}
+class WordSearcher:# 단어 검색기
+    """
+        단어 검색 및 처리를 위한 메인 클래스.
+    
+        이 클래스는 데이터베이스에서 단어를 검색하고, 관련 단어와 파생 단어를 찾으며,
+        그래프를 사용하여 관계를 시각화하는 메서드를 제공합니다.
+    
+        속성:
+            db_handler (DatabaseHandler): 쿼리를 실행하기 위한 데이터베이스 핸들러.
+            graph (networkx.Graph): 단어 관계를 시각화하기 위한 그래프 객체.
+    
+        메서드:
+            find_words(keyword): 주어진 키워드를 기반으로 데이터베이스에서 단어를 검색합니다.
+            find_related(input): 입력된 단어와 관련된 단어를 찾습니다.
+            find_derived(input): 입력된 단어에서 파생된 단어를 찾습니다.
+            add_node(input_data): 입력 데이터를 기반으로 그래프에 노드를 추가합니다.
+            add_edge(input_data): 입력 데이터를 기반으로 그래프에 엣지를 추가합니다.
+            reformat_strong(words): 단어의 강한 번호를 재포맷합니다.
+            nested_list_to_string(nested_list): 중첩된 리스트를 문자열로 변환합니다.
+    """
 
-# 트리뷰를 통해 표시할 필드의 인덱스(튜플: 딕셔너리에서 원하는 값 불러오기)
-tv_show = (field_idx['id'], field_idx['언어'], field_idx['스트롱'], \
-    field_idx['표기1'], field_idx['표기2'], field_idx['표기3'], field_idx['표기4'], \
-    field_idx['음역1'], field_idx['음역2'], field_idx['음역3'], field_idx['음역4'], \
-    field_idx['관련1'], field_idx['관련2'], field_idx['관련3'], field_idx['관련4'], \
-    field_idx['의미1'], field_idx['의미2'], field_idx['의미3'], field_idx['의미4'], field_idx['의미5'], field_idx['의미6'], field_idx['의미7'], \
-    field_idx['비고'] )
+    PRIME_PREP = (
+        'G0001_0000', 'G0303_0000', 'G0473_0000',
+        'G0575_0000', 'G0757_0000', 'G0846_0000',
+        'G1223_0000', 'G1519_0000', 'G1537_0000',
+        'G1722_0000', 'G1909_0000', 'G2095_0000',
+        'G2596_0000', 'G3326_0000', 'G3844_0000',
+        'G3956_0000', 'G4012_0000', 'G4253_0000',
+        'G4314_0000', 'G4862_0000', 'G5259_0000'
+        )# 주요 전치사
+    QUERY_DERIVED = """
+        SELECT * FROM 테이블
+        WHERE 관련1 = ? OR 관련2 = ? OR 관련3 = ? OR 관련4 = ? OR 관련5 = ? OR 관련6 = ? OR 관련7 = ?
+    """# 파생어 검색 쿼리
 
-# 트리뷰 행 정의(튜플: 딕셔너리에서 원하는 값 불러오기)
-tv_column = (field_exp['id'], field_exp['언어'], field_exp['스트롱'], \
-    field_exp['표기1'], field_exp['표기2'], field_exp['표기3'], field_exp['표기4'], \
-    field_exp['음역1'], field_exp['음역2'], field_exp['음역3'], field_exp['음역4'], \
-    field_exp['관련1'], field_exp['관련2'], field_exp['관련3'], field_exp['관련4'], \
-    field_exp['의미1'], field_exp['의미2'], field_exp['의미3'], field_exp['의미4'], field_exp['의미5'], field_exp['의미6'], field_exp['의미7'], \
-    field_exp['비고'] )
+    def __init__(self, db_handler, graph):# 초기화 메서드
+        self.db_handler = db_handler
+        self.graph = graph if graph is not None else nx.Graph()
 
-# 각 행 길이 수치(튜플: 딕셔너리에서 원하는 값 불러오기)
-tv_clm_len = (length['id'], length['언어'], length['스트롱'], \
-    length['표기'], length['표기'], length['표기'], length['표기'], \
-    length['음역'], length['음역'], length['음역'], length['음역'], \
-    length['관련'], length['관련'], length['관련'], length['관련'], \
-    length['의미'], length['의미'], length['의미'], length['의미'], length['의미'], length['의미'], length['의미'], \
-    length['비고'] )
-
-####################################################################################################
-# 여기부터 클래스와 함수 관련 코드
-####################################################################################################
-class DataBase: #데이터베이스 핸들링 클래스
-    def __init__(self, kwd):
-        self.kwd = kwd
-    def handle_db_main(self, kwd):
-        if type(kwd) == NoneType or len(kwd) == 0:
+    def find_words(self, keyword):# 단어 검색 메서드
+        results = []
+        if keyword is None or len(keyword) == 0:
             pass
-        elif type(kwd) != NoneType and len(kwd) >= 2:
-            if kwd[0].isalpha() and kwd[1].isdigit() == True:
-                cur.execute("SELECT * FROM 테이블 WHERE 스트롱넘버 = ?", ( (kwd[0]+kwd[1:].zfill(4) ).upper(), ) )
+        elif len(keyword) > 1:
+            if keyword[0].isalpha() and keyword[1:].isdigit():
+                query, params = self._prepare_strong_query(keyword)
             else:
-                cur.execute("SELECT * FROM 테이블 WHERE 표기1 = ? OR 표기2 = ? OR 표기3 = ?  OR 표기4 = ? OR \
-                    의미1 LIKE ? OR 의미2 LIKE ? OR 의미3 LIKE ? OR 의미4 LIKE ? OR \
-                    의미5 LIKE ? OR 의미6 LIKE ? OR 의미7 LIKE ?", \
-                    (kwd, kwd, kwd, kwd, \
-                    '%'+kwd+'%', '%'+kwd+'%', '%'+kwd+'%', '%'+kwd+'%', '%'+kwd+'%', '%'+kwd+'%', '%'+kwd+'%') )
-        elif type(kwd) != NoneType and len(kwd) == 1:
-            cur.execute("SELECT * FROM 테이블 WHERE 표기1 = ? OR 표기2 = ? OR 표기3 = ?  OR 표기4 = ? OR \
-                의미1 LIKE ? OR 의미2 LIKE ? OR 의미3 LIKE ? OR 의미4 LIKE ? OR \
-                의미5 LIKE ? OR 의미6 LIKE ? OR 의미7 LIKE ?", \
-                (kwd, kwd, kwd, kwd, \
-                '%'+kwd+'%', '%'+kwd+'%', '%'+kwd+'%', '%'+kwd+'%', '%'+kwd+'%', '%'+kwd+'%', '%'+kwd+'%') )
-    def handle_db_rlt(self, fld, kwd):
-        self.fld = fld
-        if type(kwd) == NoneType or len(kwd) == 0:
-            pass
-        else:
-            cur.execute("SELECT * FROM 테이블 WHERE "+fld+" = ?", (kwd, ) )
+                query, params = self._prepare_general_query(keyword)
+        elif len(keyword) == 1:
+            query, params = self._prepare_general_query(keyword)
+        
+        if query and params:
+            results = self.db_handler.execute_query(query, params)
 
-def find_words(input):
-        DataBase(input).handle_db_main(input) # 데이터베이스 검색 함수(주)
-        words = cur.fetchall() # 검색된 자료 불러오기
+        return sorted(results)
+
+    def _prepare_strong_query(self, keyword):# 스트롱넘버 검색 쿼리 생성 메서드
+        query = "SELECT * FROM 테이블 WHERE 스트롱넘버 = ?"
+        formatted_keyword = (keyword[0] + keyword[1:].zfill(4)).upper()
+        return query, (formatted_keyword,)
+
+    def _prepare_general_query(self, keyword):# 일반 검색 쿼리 생성 메서드
+        query = """
+            SELECT * FROM 테이블
+            WHERE 표기1 = ? OR 표기2 = ? OR 표기3 = ? OR 표기4 = ? OR 표기5 = ? OR 표기6 = ?
+            OR 음역1 LIKE ? OR 음역2 LIKE ? OR 음역3 LIKE ?
+            OR 음역4 LIKE ? OR 음역5 LIKE ? OR 음역6 LIKE ?
+            OR 의미1 LIKE ? OR 의미2 LIKE ? OR 의미3 LIKE ?
+            OR 의미4 LIKE ? OR 의미5 LIKE ? OR 의미6 LIKE ? OR 의미7 LIKE ?
+        """
+        params = [keyword] * 6 + [f"%{keyword}%"] * 13
+        return query, params
+
+    def find_related(self, input):# 관련어 검색 메서드
+        query1 = """
+            SELECT * FROM 테이블
+            WHERE id = ?
+        """
+        related = set()
+
+        while True:
+            input_set = set(input)
+            trigger = len(related)
+
+            for item in input:
+                rltds = (
+                    item[FIELD_IDX['관련1'] ],
+                    item[FIELD_IDX['관련2'] ],
+                    item[FIELD_IDX['관련3'] ],
+                    item[FIELD_IDX['관련4'] ],
+                    item[FIELD_IDX['관련5'] ],
+                    item[FIELD_IDX['관련6'] ],
+                    item[FIELD_IDX['관련7'] ]
+                )
+                for rltd in rltds:
+                    related.update(self.db_handler.execute_query(query1, (rltd,)))
+                    input_set.update(related)
+
+            input = list(input_set)
+            
+            if trigger == len(related):
+                return sorted(input), sorted(list(related))
+
+    def find_derived(self, input):# 파생어 검색 메서드
+        derived = set()
+
+        while True:
+            input_set = set(input)
+            trigger = len(derived)
+
+            for item in input:
+                if item[FIELD_IDX['id']] in self.PRIME_PREP:
+                    continue
+                params = (item[FIELD_IDX['id']],) * 7
+                derived.update(self.db_handler.execute_query(self.QUERY_DERIVED, params))
+                input_set.update(derived)
+
+            input = list(input_set)
+            
+            if trigger == len(derived):
+                return sorted(input), sorted(list(derived))
+
+    def add_node(self, input_data):# networkx 노드 생성 메서드
+        for item in input_data:
+            node_id = item[FIELD_IDX['id']]
+            if node_id not in self.graph.nodes:
+                label, title = self._generate_node_label_and_title(item)
+                self.graph.add_node(node_id, label=label, title=title, group=item[FIELD_IDX['언어']])
+
+    def _generate_node_label_and_title(self, item):# 노드 레이블 및 타이틀 생성 메서드
+        if item[FIELD_IDX['스트롱']] != '':
+            label = item[FIELD_IDX['스트롱']]
+            title = (
+                f"◆언어: {item[FIELD_IDX['언어']]}\n"
+                f"◆스트롱 색인 코드: {item[FIELD_IDX['스트롱']]}\n"
+                f"▶▶▶표기◀◀◀\n"
+                    f"{item[FIELD_IDX['표기1']]}\n{item[FIELD_IDX['표기2']]}\n{item[FIELD_IDX['표기3']]}\n"
+                    f"{item[FIELD_IDX['표기4']]}\n{item[FIELD_IDX['표기5']]}\n{item[FIELD_IDX['표기6']]}\n"
+                f"▶▶▶음역◀◀◀\n"
+                    f"{item[FIELD_IDX['음역1']]}\n{item[FIELD_IDX['음역2']]}\n{item[FIELD_IDX['음역3']]}\n"
+                    f"{item[FIELD_IDX['음역4']]}\n{item[FIELD_IDX['음역5']]}\n{item[FIELD_IDX['음역6']]}\n"
+                f"▶▶▶번역◀◀◀\n"
+                    f"ⓐ{item[FIELD_IDX['의미1']]}\nⓑ{item[FIELD_IDX['의미2']]}\n"
+                    f"ⓒ{item[FIELD_IDX['의미3']]}\nⓓ{item[FIELD_IDX['의미4']]}\n"
+                f"▶▶▶설명 및 용례◀◀◀\n"
+                    f"{item[FIELD_IDX['비고']]}"
+            )
+        else:
+            label = f"{item[FIELD_IDX['표기1']]}    {item[FIELD_IDX['표기2']]}    {item[FIELD_IDX['표기3']]}"
+            title = (
+                f"◆언어: {item[FIELD_IDX['언어']]}\n"
+                f"▶▶▶표기◀◀◀\n"
+                    f"{item[FIELD_IDX['표기1']]}\n{item[FIELD_IDX['표기2']]}\n{item[FIELD_IDX['표기3']]}\n"
+                    f"{item[FIELD_IDX['표기4']]}\n{item[FIELD_IDX['표기5']]}\n{item[FIELD_IDX['표기6']]}\n"
+                f"▶▶▶음역◀◀◀\n"
+                    f"{item[FIELD_IDX['음역1']]}\n{item[FIELD_IDX['음역2']]}\n{item[FIELD_IDX['음역3']]}\n"
+                    f"{item[FIELD_IDX['음역4']]}\n{item[FIELD_IDX['음역5']]}\n{item[FIELD_IDX['음역6']]}\n"
+                f"▶▶▶번역◀◀◀\n"
+                    f"ⓐ{item[FIELD_IDX['의미1']]}\nⓑ{item[FIELD_IDX['의미2']]}\n"
+                    f"ⓒ{item[FIELD_IDX['의미3']]}\nⓓ{item[FIELD_IDX['의미4']]}\n"
+                f"▶▶▶설명 및 용례◀◀◀\n"
+                    f"{item[FIELD_IDX['비고']]}"
+            )
+        return label, title
+
+    def add_edge(self, input_data):# networkx 엣지 생성 메서드
+        while True:
+            new_items = []
+
+            for item in input_data:
+                for i in [
+                    FIELD_IDX['관련1'],
+                    FIELD_IDX['관련2'],
+                    FIELD_IDX['관련3'],
+                    FIELD_IDX['관련4'],
+                    FIELD_IDX['관련5'],
+                    FIELD_IDX['관련6'],
+                    FIELD_IDX['관련7']
+                ]:
+                    if item[i] != '':
+                        if item[i] not in self.graph.nodes:
+                            node_temp = []
+                            node_temp.extend(self.db_handler.execute_query("SELECT * FROM 테이블 WHERE id = ?", (item[i],)))
+                            node_temp = self._rmv_none(node_temp)
+                            new_items.extend(node_temp)
+                            self.add_node(node_temp)
+                        else:
+                            pass
+
+                        if (item[i], item[0]) not in self.graph.edges:
+                            self.graph.add_edge(item[i], item[0], arrows='none' )
+                        else:
+                            pass
+
+            if new_items == []:
+                break
+
+            input_data.extend(new_items)
+
+    def _rmv_none(self, data):# None 값 제거 메서드
+        return [[item if item is not None else '' for item in row] for row in data]
+    
+    def reformat_strong(self, words):# 스트롱 코드 형식 변경 메서드
+        for word in words:
+            word[FIELD_IDX['스트롱'] ] = re.sub(r'([a-zA-Z])0+(\d+)', r'\1\2', word[FIELD_IDX['스트롱'] ])
         return words
 
-def find_origin(input):
-    origin = [] # origin 자료를 위한 리스트 생성
-    for i in range(len(input) ): # 검색한 단어의 '관련' 항에 기입된 'id'를 이용하여 추가검색
-        org = (input[i][field_idx['관련1'] ], \
-            input[i][field_idx['관련2'] ], \
-            input[i][field_idx['관련3'] ], \
-            input[i][field_idx['관련4'] ] )
-        for j in range(4):
-            DataBase(input).handle_db_rlt('id', org[j] )
-            origin.extend(cur.fetchall() ) # 검색된 자료 불러오기
-    return origin
+    @staticmethod
+    def nested_list_to_string(nested_list):# 중첩 리스트를 문자열로 변환하는 메서드
+        result = []
 
-def find_relate(keyword, input):
-    field_rlt = (field[field_idx['관련1'] ], \
-        field[field_idx['관련2'] ], \
-        field[field_idx['관련3'] ], \
-        field[field_idx['관련4'] ] ) # 데이터베이스 검색 함수를 위한 필드 정의
-    relate = [] # relate 자료를 위한 리스트 생성
-    for i in range(len(input) ): # '관련' 항에 검색한 단어의 'id'가 기록된 자료 검색
-        for j in range(4):
-            DataBase(keyword).handle_db_rlt(field_rlt[j], input[i][field_idx['id'] ] ) # 데이터베이스 검색 함수(관련)
-            relate.extend(cur.fetchall() ) # 검색된 자료 불러오기
-    return relate
-    pass
+        if isinstance(nested_list[0], list):
+            for i, sublist in enumerate(nested_list):
+                if i > 0:
+                    result.append("\n\n▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶▶\n\n")# 구분선 추가
 
-# None -> '' 변환 함수
-def rmv_none(input_data):
-    for i in range(len(input_data) ):
-        input_data[i] = list(input_data[i] )
-        for j in range(0, 27):
-            if input_data[i][j] == None:
-                input_data[i][j] = ''
-
-# 중복 제거 함수
-def rmv_dplct(input_data):
-    mid_data = []
-    for i in input_data:
-        if i not in mid_data:
-            mid_data.append(i)
-    return mid_data
-
-# 자료 갈무리 함수
-def orgnz_data(input_data):
-    return [[input_data[i][j] for j in tv_show] for i in range(len(input_data) ) ]
-
-def mk_nx_node(input_data):
-    for i in range(len(input_data) ):
-        if input_data[i][field_idx['id'] ] in list(DG.nodes):
-            continue
+                for j, item in enumerate(sublist):
+                    if j > 0:
+                        result.append("\n")
+                    result.append(str(item))
         else:
-            if input_data[i][1] == '히브리어/아람어':
-                node_clr = 'gold'
-            elif input_data[i][1] == '헬라어':
-                node_clr = 'aqua'
-            elif input_data[i][1] == '라틴어':
-                node_clr = 'orangered'
-            elif input_data[i][1] == '영어':
-                node_clr = 'violet'
-            else:
-                node_clr = 'lightgrey'
-            text_node = bidialg.get_display(input_data[i][field_idx['언어'] ]\
-                +'\n'+input_data[i][field_idx['스트롱'] ]+'\n'+input_data[i][field_idx['표기1'] ]\
-                +'\n음역: '+input_data[i][field_idx['음역1'] ]\
-                +'\n의미: \n'+input_data[i][field_idx['의미1'] ]\
-                    +'\n'+input_data[i][field_idx['의미2'] ]\
-                    +'\n'+input_data[i][field_idx['의미3'] ]\
-                    +'\n'+input_data[i][field_idx['의미4'] ] )
-            DG.add_node(input_data[i][field_idx['id'] ], color = node_clr, text=text_node)
+            for i, item in enumerate(nested_list):
+                if i > 0:
+                    result.append("\n")
+                result.append(str(item))
 
-def mk_nx_edge(input_data):
-    for i in range(len(input_data) ):
-        for j in [field_idx['관련1'], field_idx['관련2'], field_idx['관련3'], field_idx['관련4'] ]:
-            if input_data[i][j] != '':
-                if input_data[i][j] in list(DG.nodes):
-                    pass
-                else:
-                    if input_data[i][1] == '히브리어/아람어':
-                        node_clr = 'gold'
-                    elif input_data[i][1] == '헬라어':
-                        node_clr = 'aqua'
-                    elif input_data[i][1] == '라틴어':
-                        node_clr = 'orangered'
-                    elif input_data[i][1] == '영어':
-                        node_clr = 'violet'
-                    else:
-                        node_clr = 'lightgrey'
-                    node_temp = []
-                    DataBase(input_data[i][j] ).handle_db_rlt('id', input_data[i][j] )
-                    node_temp.extend(cur.fetchall() )
-                    rmv_none(node_temp)
-                    text_node = bidialg.get_display(node_temp[0][field_idx['언어'] ]\
-                        +'\n'+node_temp[0][field_idx['스트롱'] ]+'\n'+node_temp[0][field_idx['표기1'] ]\
-                        +'\n음역: '+node_temp[0][field_idx['음역1'] ]\
-                        +'\n의미: \n'+node_temp[0][field_idx['의미1'] ]\
-                            +'\n'+node_temp[0][field_idx['의미2'] ]\
-                            +'\n'+node_temp[0][field_idx['의미3'] ]\
-                            +'\n'+node_temp[0][field_idx['의미4'] ] )
-                    DG.add_node(input_data[i][j], color = node_clr, text=text_node)
-                    node_temp = []
-                DG.add_edge(input_data[i][j], input_data[i][0] )
-            else:
-                continue
+        return "".join(result)
 
-# 트리뷰 생성 클래스
-class TreeView_Ctrl:
-    def __init__(self, tv):
-        self.tv = tv
-        for i in range(len(tv_column)+1):
-            if i == 0:
-                self.tv.column('#0', width=0, stretch=NO)
-                self.tv.heading('#0', text='', anchor=CENTER)
-            else:
-                self.tv.column(tv_column[i-1], anchor=CENTER, width=tv_clm_len[i-1] )
-                self.tv.heading(tv_column[i-1], text=field[tv_show[i-1] ], anchor=CENTER)
-        pass
-    pass
+class Application:# 어플리케이션 클래스
+    """
+        단어 검색을 위한 Tkinter 기반 GUI 애플리케이션.
+    
+        이 클래스는 데이터베이스에서 단어를 검색하고, 검색 결과를 표시하며,
+        그래프를 사용하여 단어 간의 관계를 시각화하는 그래픽 사용자 인터페이스(GUI)를 제공합니다.
+    
+        속성:
+            root (Tk): Tkinter 애플리케이션의 루트 윈도우.
+            word_searcher (WordSearcher): 검색 쿼리를 실행하기 위한 단어 검색 객체.
+            graph (networkx.Graph): 단어 관계를 시각화하기 위한 그래프 객체.
+            last_directory (str): 결과를 저장하는 데 사용된 마지막 디렉토리.
+            search_entry (Entry): 검색 키워드를 입력하기 위한 입력 위젯.
+            result_text (ScrolledText): 검색 결과를 표시하기 위한 텍스트 위젯.
+    
+        메서드:
+            setup_ui(): 사용자 인터페이스 구성 요소를 설정합니다.
+            search_command(): 검색 명령을 실행하고 결과를 표시합니다.
+    """
+    def __init__(self, root, word_searcher):# GUI 초기화
+        self.root = root
+        self.word_searcher = word_searcher
+        self.graph = word_searcher.graph
+        self.last_directory = '.'
+        self.setup_ui()
 
-# 트리뷰 값(튜플) 클립보드에 복사 관련 함수들
-def clip_tv_base(treeview):
-    sel = treeview.selection()# 선택된 아이템들 획득
-    root.clipboard_clear()# 클립보드 초기화
-    # 헤더 복사
-    headings = [treeview.heading('#{}'.format(i), 'text') for i in range(len(treeview.cget('columns') ) + 1) ]
-    root.clipboard_append('\t'.join(headings) + '\n')
-    for item in sel:
-        # 열의 값들을 획득
-        values = [treeview.item(item, 'text') ]
-        values.extend(treeview.item(item, 'values') )
-        # \t 으로 분리되도록 값들을 클립보드에 덧붙임
-        root.clipboard_append('\t'.join(values) + '\n')
-    pass
+    def setup_ui(self):# GUI 구성 메서드
+        self.root.title("단어 검색기")
+        self.root.state("zoomed")
+        self.root.configure(bg="black")
 
-def clip_tv_1(event):
-    clip_tv_base(tv_1)
-def clip_tv_2(event):
-    clip_tv_base(tv_2)
-def clip_tv_3(event):
-    clip_tv_base(tv_3)
+        frame_0 = Frame(self.root, relief='groove', bd=1, pady=7, bg="#100c08")
+        frame_1 = Frame(self.root, relief='flat', bd=1, pady=7, bg="black")
+        
+        frame_0.pack()
+        frame_1.pack(fill="both", expand=True)
 
-####################################################################################################
-# 버튼 클릭 명령 함수
-####################################################################################################
-def btncmd():
-    #트리뷰 초기화
-    for i in range(3):
-        tv[i].delete(*tv[i].get_children() )
+        label_0 = Label(frame_0, text='검색할 단어를 입력하세요', bg="#100c08", fg="white")
+        label_1 = Label(frame_1, text='검색 결과', bg="black", fg="white")
+        
+        label_0.pack()
+        label_1.pack()
 
-    #그래프 초기화
-    plt.cla()
-    #networkx 초기화
-    DG.clear()
+        self.search_entry = Entry(frame_0, width=14)
+        self.search_entry.pack()
 
-    #키워드 획득
-    wrd = s_e.get() # 획득한 키워드를 wrd로 획득
-    words = find_words(wrd)
-    words.sort() # 불러온 자료 정렬
+        Button(frame_0, text='검색', command=self.search_command).pack()
 
-    origin = find_origin(words)
-    origin.sort() # 불러온 자료 정렬
+        self.result_text = ScrolledText(frame_1, padx=3, pady=3, bg="#100c08", fg="white")
+        self.result_text.pack(fill="both", expand=True)
 
-    relate = find_relate(wrd, words)
-    relate.sort() # 불러온 자료 정렬
+    def search_command(self):# 검색 명령 메서드
+        self.dscrpt_show = (
+            FIELD_IDX['언어'], FIELD_IDX['스트롱'],
+            FIELD_IDX['표기1'], FIELD_IDX['표기2'], FIELD_IDX['표기3'],
+            FIELD_IDX['표기4'], FIELD_IDX['표기5'], FIELD_IDX['표기6'],
+            FIELD_IDX['음역1'], FIELD_IDX['음역2'], FIELD_IDX['음역3'],
+            FIELD_IDX['음역4'], FIELD_IDX['음역5'], FIELD_IDX['음역6'],
+            FIELD_IDX['의미1'], FIELD_IDX['의미2'], FIELD_IDX['의미3'],
+            FIELD_IDX['의미4'], FIELD_IDX['의미5'], FIELD_IDX['의미6'], FIELD_IDX['의미7'],
+            FIELD_IDX['비고']
+        )# 표시할 필드 설정
 
-    rmv_none(words)
-    rmv_none(origin)
-    rmv_none(relate)
+        self.color_map = {
+            '히브리어/아람어': 'gold',
+            '헬라어': 'aqua',
+            '라틴어': '#9f0807',
+            '영어': 'violet'
+        }# 언어별 색상 설정
 
-    origin = rmv_dplct(origin)
-    relate = rmv_dplct(relate)
+        self.graph.clear()
 
-    origin = [i for i in origin if i not in words]
-    relate = [i for i in relate if i not in words and i not in origin]
+        keyword = self.search_entry.get()
+        words = self.word_searcher.find_words(keyword)
 
-    words_show = []
-    origin_show = []
-    relate_show = []
+        words_temp, related = self.word_searcher.find_related(words)
+        words_temp, derived = self.word_searcher.find_derived(words_temp)
 
-    words_show = orgnz_data(words)
-    origin_show = orgnz_data(origin)
-    relate_show = orgnz_data(relate)
+        words = self.word_searcher._rmv_none(words)
+        related = self.word_searcher._rmv_none(related)
+        derived = self.word_searcher._rmv_none(derived)
 
-    for i in range(len(words_show) ):
-        tv_1.insert(parent="", index=i, iid=i, text='', values=(words_show[i]) )
-    for i in range(len(origin_show) ):
-        tv_2.insert(parent='', index=i, iid=i, text='', values=origin_show[i] )
-    for i in range(len(relate_show) ):
-        tv_3.insert(parent='', index=i, iid=i, text='', values=relate_show[i] )
+        related = [item for item in related if item not in words]
+        derived = [item for item in derived if item not in words and item not in related]
 
-    mk_nx_node(words)
-    mk_nx_node(origin)
-    mk_nx_node(relate)
-    mk_nx_edge(words)
-    mk_nx_edge(relate)
+        words = self.word_searcher.reformat_strong(words)
+        related = self.word_searcher.reformat_strong(related)
+        derived = self.word_searcher.reformat_strong(derived)
 
-    pos = nx.shell_layout(DG)
-    node_colors = [node[1]['color'] for node in DG.nodes(data=True)]
+        self.dscrpt_words = [[row[i] for i in self.dscrpt_show] for row in words]
 
-    nx.draw_networkx_nodes(DG, pos, node_size=5000, node_color=node_colors)
-    nx.draw_networkx_edges(DG, pos, node_size=5000)
+        self.result_text.configure(state="normal")
+        self.result_text.delete(1.0, "end")
+        self.result_text.insert("1.0", self.word_searcher.nested_list_to_string(self.dscrpt_words))
+        self.result_text.configure(state="disabled")
 
-    node_labels = nx.get_node_attributes(DG, 'text')
-    nx.draw_networkx_labels(DG, pos, font_family=['Noto Serif', 'David Libre', 'Gulim'], font_size=10, labels = node_labels)
+        self.word_searcher.add_node(words + related + derived)
+        self.word_searcher.add_edge(words + related + derived)
 
-    plt.show()
+        net = Network(bgcolor='black', font_color='white', notebook=False, directed=False)
+        net.from_nx(self.graph)
 
-####################################################################################################
-# 여기부터 프로그램 UI 관련 코드
-####################################################################################################
-root = Tk()# GUI 루프 시작
-root.title('단어 검색')# 창 제목
-# root.attributes('-fullscreen', True)# 전체화면 설정
-root.geometry('%dx%d+50+50' %(root.winfo_screenwidth()-100, root.winfo_screenheight()-200 ) )# 창 크기
+        default_color = '#c0c0c0'
 
-# 프레임 셋업
-frame_0 = Frame(root, relief='groove', bd=1, pady=14)# 검색창 프레임
-frame_1 = Frame(root, relief='flat', bd=1, pady=14)# 검색 단어 출력 프레임
-frame_2 = Frame(root, relief='flat', bd=1, pady=14)# 유래 출력 프레임
-frame_3 = Frame(root, relief='flat', bd=1, pady=14)# 관련 단어 출력 프레임
-frame = (frame_0, frame_1, frame_2, frame_3)
+        for node in net.nodes:
+            group = node['group']
+            node['color'] = self.color_map.get(group, default_color)
 
-# 라벨 셋업
-label_0 = Label(frame_0, text='검색할 단어를 입력하세요')# 검색창 라벨
-label_1 = Label(frame_1, text='해당 단어')# 검색 단어 출력 라벨
-label_2 = Label(frame_2, text='유래/관련 단어')# 유래 출력 라벨
-label_3 = Label(frame_3, text='파생/관련 단어')# 관련 단어 출력 라벨
-label = (label_0, label_1, label_2, label_3)
+        for edge in net.edges:
+            edge['color'] = '#808080'
 
-# 스크롤바/트리뷰 셋업
-tvsb_v_1 = Scrollbar(frame_1, orient='vertical')# 트리뷰1용 세로 스크롤 바
-tvsb_v_2 = Scrollbar(frame_2, orient='vertical')# 트리뷰2용 세로 스크롤 바
-tvsb_v_3 = Scrollbar(frame_3, orient='vertical')# 트리뷰3용 세로 스크롤 바
-tvsb_v = (tvsb_v_1, tvsb_v_2, tvsb_v_3)
-tvsb_h_1 = Scrollbar(frame_1, orient='horizontal')# 트리뷰1용 가로 스크롤 바
-tvsb_h_2 = Scrollbar(frame_2, orient='horizontal')# 트리뷰2용 가로 스크롤 바
-tvsb_h_3 = Scrollbar(frame_3, orient='horizontal')# 트리뷰3용 가로 스크롤 바
-tvsb_h = (tvsb_h_1, tvsb_h_2, tvsb_h_3)
-tv_1 = Treeview(frame_1, height=7, xscrollcommand=tvsb_h_1.set, yscrollcommand=tvsb_v_1.set)# 검색 단어 출력 트리뷰
-tv_2 = Treeview(frame_2, height=7, xscrollcommand=tvsb_h_2.set, yscrollcommand=tvsb_v_2.set)# 유래 출력 트리뷰
-tv_3 = Treeview(frame_3, height=7, xscrollcommand=tvsb_h_3.set, yscrollcommand=tvsb_v_3.set)# 관련 단어 출력 트리뷰
-tv = (tv_1, tv_2, tv_3)
-for i in range(len(tv) ):
-    tv[i]['columns']=tv_column
+        directory = filedialog.askdirectory\
+            (title= '결과를 저장할 폴더를 선택해 주세요.', initialdir= self.last_directory)
 
-# 검색창
-s_e = Entry(frame_0, width=14)
-s_e.insert(0, "")#입력 가능
+        net.toggle_physics(True)
+        net.show_buttons(filter_=['physics'])
+        net.show(directory+'/'+str(keyword)+f".html", notebook=False)
 
-# 버튼
-btn0 = Button(frame_0, padx=10, pady=5, text='검색', command=btncmd)
+if __name__ == "__main__":# 메인 함수
+    db_path = "./bbwdb.db"
+    db_handler = DatabaseHandler(db_path)
+    graph = nx.Graph()
 
-# 프레임/라벨 패킹
-for i in range(len(frame) ):
-    frame[i].pack()
-    label[i].pack()
+    word_searcher = WordSearcher(db_handler, graph)
 
-s_e.pack()# 엔트리(검색창) 패킹
-btn0.pack()# 검색 버튼 패킹
+    root = Tk()
+    app = Application(root, word_searcher)
+    root.mainloop()
 
-# 스크롤바/트리뷰 패킹
-for i in range(len(tv) ):
-    tvsb_v[i].pack(side='right', fill='y')
-    tvsb_v[i].config(command=tv[i].yview)
-    tvsb_h[i].pack(side='bottom', fill='x')
-    tvsb_h[i].config(command=tv[i].xview)
-    TreeView_Ctrl(tv[i] )
-    tv[i].pack(side='left', fill='y')
-
-# <Control-c> 입력으로 선택 내용 클립보드 저장
-tv_1.bind('<Control-c>', clip_tv_1)
-tv_2.bind('<Control-c>', clip_tv_2)
-tv_3.bind('<Control-c>', clip_tv_3)
-
-root.mainloop()# GUI 루프 끝
-
-con.close()# 데이터 베이스 닫기
+    db_handler.close()
